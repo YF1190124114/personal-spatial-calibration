@@ -36,3 +36,8 @@ $RECYCLE.BIN/
 # Copied from the installed MediaPipe package
 public/mediapipe/
 .pose-test/
+
+# Local Python signal-generation environment
+.venv/
+__pycache__/
+*.pyc

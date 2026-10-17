@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { containRect, project, quality, summarize } from '../.pose-test/poseMath.js';
+import { containRect, project, quality, summarize } from '../.pose-test/pose/poseMath.js';
 test('empty result has no confidence and no person', () => assert.deepEqual(summarize([]), {status:'Person not detected', confidence:null}));
 test('confidence uses weaker visibility or presence; missing scores do not imply certainty', () => { assert.equal(quality({x:0,y:0,visibility:.9,presence:.2}), .2); assert.equal(quality({x:0,y:0}),0); assert.equal(quality({x:0,y:0,visibility:.8}),.8); });
 test('one hidden highlighted landmark makes tracking uncertain even with a high average', () => { const p=Array.from({length:33},()=>({x:.5,y:.5,visibility:1,presence:1})); assert.equal(summarize(p).status,'Person detected'); p[7].visibility=.1; assert.equal(summarize(p).status,'Tracking uncertain'); assert.equal(summarize(p).confidence,.82); });

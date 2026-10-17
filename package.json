@@ -1,7 +1,7 @@
 {
   "name": "personal-spatial-calibration",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -10,7 +10,7 @@
     "postinstall": "node scripts/prepare-pose.mjs",
     "predev": "node scripts/prepare-pose.mjs",
     "prebuild": "node scripts/prepare-pose.mjs",
-    "test": "tsc src/pose/poseMath.ts --target ES2022 --module ES2022 --outDir .pose-test --skipLibCheck && node --test tests/poseMath.test.mjs"
+    "test": "tsc src/pose/poseMath.ts src/calibration/machine.ts src/audio/EssPlayer.ts --target ES2022 --module ES2022 --outDir .pose-test --skipLibCheck && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.1.0",
