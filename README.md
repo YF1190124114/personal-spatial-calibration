@@ -1,4 +1,4 @@
-# Personal Spatial Calibration — V0.4
+# Personal Spatial Calibration — V0.5
 
 A browser-only research prototype built with React, Vite, TypeScript and standard browser APIs.
 
@@ -97,3 +97,45 @@ No additional dependencies. No audio recording, datasets, localization, directio
 Automated verification: `npm run test` passes ten tests, including complete eight-step reducer flow, 3–2–1 transitions, pause/resume, previous invalidation, restart, exit, invalid/duplicate events, and the existing five pose tests. `npm run build` passes. Physical turning and real-phone behavior still require user acceptance. No commit or push is made until acceptance.
 
 V0.4 browser verification limits: Chrome visibly showed preparation and the 0° step-completion state with 1/8 circular progress. A subsequent screenshot showed the real camera image and pose landmarks still active in the guided flow. Desktop presentation and the initial 384 × 729 preparation state were inspected. Browser automation repeatedly timed out or refused input after reporting changed UI, so a complete eight-step browser click-through, live countdown pause/resume timing, navigation and final mobile visual acceptance remain pending. Those state transitions passed the automated reducer tests; this is not a claim of full browser or physical acceptance.
+
+## V0.5 — ESS playback only
+
+This revision adds one locally served sweep to each manual direction. It does not capture audio, measure a directional response, estimate orientation, analyze acoustics or create a dataset. All eight directions use `public/audio/ess-200-8000-3s.wav`; there are no direction-specific signals.
+
+### Signal and reproduction
+
+- Logarithmic/exponential sine sweep, generated using `scipy.signal.chirp(method="logarithmic", phi=-90)`.
+- 200 Hz at t=0 to 8000 Hz at t=3 s; 3.000 s, 48,000 Hz, 144,000 samples, mono PCM16 WAV. The final stored sample occurs at t=3−1/48000 s, as usual for sampled audio.
+- 20 ms (960 samples) sine-squared fade-in and fade-out; both endpoints are zero.
+- File peak amplitude 0.20 (approximately −14 dBFS). Fixed Web Audio gain 0.5 for every direction, giving an approximate digital peak of 0.10 (−20 dBFS); no automatic volume changes. Actual speaker loudness depends on the user's device and volume.
+
+Reproduce with Python (tested using Python 3.13, NumPy 2.5.4, SciPy 1.18.1):
+
+```sh
+python3 -m venv .venv
+.venv/bin/pip install -r scripts/requirements-audio.txt
+.venv/bin/python scripts/generate_ess.py
+.venv/bin/python scripts/test_ess.py
+```
+
+The WAV is checked in as a required reproducible asset; users need no Python installation to run the web app.
+
+### Playback architecture
+
+`src/audio/EssPlayer.ts` lazily creates one AudioContext, fetches/decodes the WAV once, and caches its AudioBuffer across directions, pauses, restarts and exits. Each play creates a fresh one-shot source with gain 0.5 and stops any existing source first. A generation counter and source identity guard discard stale end events. Explicit stop clears the end handler, so interrupted playback never counts as completed. Natural `onended` is the only playback completion signal; a progress timer never completes a step. AudioContext suspension/interruption stops audio and pauses the sequence. Final hook unmount stops playback and closes the context.
+
+`useCalibration.ts` remains mounted with camera and pose hooks. Ready, direction confirmation and Resume call AudioContext.resume directly in the click handler before awaiting asset preparation. An operation counter invalidates pending preparations after navigation, pause, exit or restart. Countdown timers and playback progress timers are canceled on phase changes. No extra camera capture pipeline is created.
+
+Reducer sequence: preparation → rotate/manual confirmation → countdown (3,2,1) → playing → feedback → next direction, then complete after direction eight. `AUDIO_ENDED` advances completion only in playing; failure returns to rotate without credit. A pause during sound stops it and returns the current direction to manual confirmation. Resume requires another confirmation, a full countdown and full sweep. Previous is disabled during playback; pause, restart and exit remain enabled as immediate stop controls. From later phases, Previous invalidates completion from the revisited direction onward. Next remains explicit so step feedback is readable.
+
+Before the first sound, preparation displays: “Please set your device volume to a comfortable level.” Playback shows “Playing calibration sound”, “Please remain still”, audio-clock progress and remaining seconds. The camera and pose implementations are unchanged.
+
+### V0.5 verification — 17 October 2026
+
+- `npm run test`: 21 tests, using the real reducer and a simulated Web Audio implementation, plus existing pose tests. Coverage includes shared eight-direction buffer/fetch/decode, completion ordering, duplicate countdown events, stop/no-overlap/stale completion, suspension, load/decode/start errors and retry, full replay after pause, Previous, Restart and Exit. The actual WAV format, length, headroom and endpoints are checked in this suite. These are automated logic tests, not an acoustic or real-speaker measurement.
+- `python scripts/test_ess.py`: validates the exact generated samples, 20 ms envelopes, and logarithmic instantaneous-frequency law, as well as WAV parameters.
+- `npm run build`: TypeScript and Vite production build pass, including the WAV.
+- Desktop Chrome: preparation warning displayed; Ready enabled audio successfully; 0° countdown completed, Web Audio ended naturally, Playback completed feedback appeared and progress became 1/8. Next direction reached 45°. The camera remained ready and pose status continued updating during the flow. An initial native-fetch receiver issue was fixed and given a regression test.
+- Full physical listening, real phone autoplay/interruption behavior, continuous eight-direction browser playback, and live interruption timing remain manual acceptance checks. No claim of audible speaker output, exact physical sound pressure or acoustic success is made from UI/automated tests. Existing MediaPipe diagnostic logs remain possible.
+
+Manual acceptance: set a comfortable low device volume, start the flow, select Ready, confirm each target, watch 3–2–1, listen to the complete three-second sweep, and advance only after Playback completed. Repeat eight directions. Pause during a sweep and check silence; Resume, confirm again and verify the full sweep replays. Test Previous from feedback, Restart and Exit during a sweep; confirm no stale completion or overlapping sound. Check the live camera and landmarks, and repeat on an actual phone using HTTPS. A muted or misrouted device can complete Web Audio playback silently; the prototype cannot verify physical sound output.
