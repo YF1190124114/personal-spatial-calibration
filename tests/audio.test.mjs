@@ -19,10 +19,10 @@ test('all eight directions share one fetch, decode and buffer; only natural audi
  for(let step=0;step<8;step++){
   await f.player.prepare();state=reduce(state,{type:'CONFIRM'});
   for(let i=0;i<3;i++)state=reduce(state,{type:'TICK'});
-  assert.equal(state.phase,'playing');assert.equal(state.completed,step);assert.equal(reduce(state,{type:'NEXT'}),state);
+  state=reduce(reduce(state,{type:'CAPTURE_STARTED'}),{type:'PRE_ROLL_READY'});assert.equal(state.phase,'playing');assert.equal(state.completed,step);assert.equal(reduce(state,{type:'NEXT'}),state);
   let ends=0; f.player.play(()=>{ends++;state=reduce(state,{type:'AUDIO_ENDED'});});
   assert.equal(ends,0);assert.equal(f.gains[step].gain.value,PLAYBACK_GAIN);
-  f.sources[step].finish();assert.equal(ends,1);assert.equal(state.completed,step+1);state=reduce(state,{type:'NEXT'});
+  f.sources[step].finish();assert.equal(ends,1);assert.equal(state.completed,step);state=reduce(state,{type:'RECORDING_COMPLETE'});assert.equal(state.completed,step+1);state=reduce(state,{type:'NEXT'});
  }
  assert.equal(state.phase,'complete');assert.deepEqual(f.stats(),{fetches:1,decodes:1,resumes:0});assert.ok(f.sources.every(source=>source.buffer===f.sources[0].buffer));
 });
