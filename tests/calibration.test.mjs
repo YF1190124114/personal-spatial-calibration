@@ -5,7 +5,7 @@ const send=(state,type)=>reduce(state,{type});
 const start=()=>send(send(initialState,'START'),'READY');
 test('eight directions require manual confirmation, three ticks and explicit advancement',()=>{
  let state=start(); assert.deepEqual(DIRECTIONS,[0,45,90,135,180,225,270,315]);
- for(let step=0;step<8;step++) { assert.equal(state.step,step); assert.equal(state.phase,'rotate'); assert.equal(send(state,'TICK'),state); state=send(state,'CONFIRM'); assert.equal(state.count,3); state=send(state,'TICK'); assert.equal(state.count,2); state=send(state,'TICK'); assert.equal(state.count,1); state=send(state,'TICK'); assert.equal(state.phase,'playing'); assert.equal(state.completed,step); state=send(state,'AUDIO_ENDED'); assert.equal(state.phase,'feedback'); assert.equal(state.completed,step+1); state=send(state,'NEXT'); }
+ for(let step=0;step<8;step++) { assert.equal(state.step,step); assert.equal(state.phase,'rotate'); assert.equal(send(state,'TICK'),state); state=send(state,'CONFIRM'); assert.equal(state.count,3); state=send(state,'TICK'); assert.equal(state.count,2); state=send(state,'TICK'); assert.equal(state.count,1); state=send(state,'TICK'); assert.equal(state.phase,'recordingPrepare'); state=send(send(state,'CAPTURE_STARTED'),'PRE_ROLL_READY'); assert.equal(state.phase,'playing'); assert.equal(state.completed,step); state=send(state,'AUDIO_ENDED'); assert.equal(state.phase,'postroll'); assert.equal(state.completed,step); state=send(state,'RECORDING_COMPLETE'); assert.equal(state.phase,'feedback'); assert.equal(state.completed,step+1); state=send(state,'NEXT'); }
  assert.equal(state.phase,'complete'); assert.equal(state.completed,8);
 });
 test('pause blocks ticking and navigation; resume preserves countdown number',()=>{
@@ -27,7 +27,7 @@ test('out-of-phase and duplicate events cannot skip steps',()=>{
 });
 
 test('pause during playback requires a full countdown and replay after resume',()=>{
- let state=start();state=send(state,'CONFIRM');for(let i=0;i<3;i++)state=send(state,'TICK');state=send(state,'PAUSE');assert.equal(state.phase,'rotate');assert.equal(state.count,3);assert.equal(state.completed,0);assert.equal(send(state,'AUDIO_ENDED'),state);state=send(state,'RESUME');state=send(state,'CONFIRM');assert.equal(state.count,3);for(let i=0;i<3;i++)state=send(state,'TICK');assert.equal(state.phase,'playing');assert.equal(state.completed,0);
+ let state=start();state=send(state,'CONFIRM');for(let i=0;i<3;i++)state=send(state,'TICK');state=send(state,'PAUSE');assert.equal(state.phase,'rotate');assert.equal(state.count,3);assert.equal(state.completed,0);assert.equal(send(state,'AUDIO_ENDED'),state);state=send(state,'RESUME');state=send(state,'CONFIRM');assert.equal(state.count,3);for(let i=0;i<3;i++)state=send(state,'TICK');assert.equal(state.phase,'recordingPrepare');assert.equal(state.completed,0);
 });
 test('failure, previous, restart and exit invalidate current playback completion',()=>{
  const playing={...start(),phase:'playing',step:2,completed:2,count:0};

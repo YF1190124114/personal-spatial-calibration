@@ -36,6 +36,7 @@ export class EssPlayer {
     await Promise.all([resume, this.buffer ? Promise.resolve(this.buffer) : this.loading]);
     if (context.state !== 'running') throw new Error('Audio is suspended. Tap again to enable sound.');
   }
+  get audioContext() { return this.context; }
   play(onEnded: () => void) {
     this.stop();
     const context = this.context;
@@ -51,7 +52,8 @@ export class EssPlayer {
       source.disconnect(); gain.disconnect(); onEnded();
     };
     this.source = source; this.gain = gain; this.startedAt = context.currentTime;
-    try { source.start(); } catch (error) { this.stop(); throw error; }
+    try { source.start(this.startedAt); } catch (error) { this.stop(); throw error; }
+    return { startedAt: this.startedAt, duration: this.buffer.duration };
   }
   get remaining() { return this.source && this.context && this.buffer ? Math.max(0, this.buffer.duration - (this.context.currentTime - this.startedAt)) : 3; }
   stop() {

@@ -1,4 +1,4 @@
-# Personal Spatial Calibration — V0.5
+# Personal Spatial Calibration — V0.6
 
 A browser-only research prototype built with React, Vite, TypeScript and standard browser APIs.
 
@@ -139,3 +139,52 @@ Before the first sound, preparation displays: “Please set your device volume t
 - Full physical listening, real phone autoplay/interruption behavior, continuous eight-direction browser playback, and live interruption timing remain manual acceptance checks. No claim of audible speaker output, exact physical sound pressure or acoustic success is made from UI/automated tests. Existing MediaPipe diagnostic logs remain possible.
 
 Manual acceptance: set a comfortable low device volume, start the flow, select Ready, confirm each target, watch 3–2–1, listen to the complete three-second sweep, and advance only after Playback completed. Repeat eight directions. Pause during a sweep and check silence; Resume, confirm again and verify the full sweep replays. Test Previous from feedback, Restart and Exit during a sweep; confirm no stale completion or overlapping sound. Check the live camera and landmarks, and repeat on an actual phone using HTTPS. A muted or misrouted device can complete Web Audio playback silently; the prototype cannot verify physical sound output.
+
+## V0.6 — Microphone capture and local dataset export
+
+Microphone permission is requested only by clicking **Enable microphone** (or explicitly selecting/reconnecting a device after permission). Camera capture and MediaPipe implementations remain unchanged. `Microphone.ts` enumerates audio inputs, listens for device changes, stops previous audio tracks on switching, stops stale streams from late permission requests, and handles missing/ended/muted tracks. Denial and unavailable-device states have recovery instructions. Camera/video tracks are never stopped by microphone management.
+
+The microphone panel shows the selected device, connection and last-request permission status, effective processing settings, recording stage, live RMS level and waveform. A connected microphone remains active for level monitoring, including after leaving the flow; click **Disconnect microphone** to stop its audio tracks. Monitoring does not retain PCM. Device selection is locked during countdown/capture; Disconnect, Pause, Restart and Exit remain emergency stop controls.
+
+### Raw PCM architecture and timing
+
+- `public/worklets/pcm-capture.js` runs on the audio rendering thread. It captures float PCM to bounded in-memory chunks, downmixed by Web Audio to one channel. Its output stays silent, preventing microphone-to-speaker feedback. No MediaRecorder or compressed recording is used.
+- `PcmRecorder.ts` owns the worklet graph, command IDs, monitoring, pre-roll/complete promises, cancellation and timeout. Devices require AudioWorklet support on localhost/HTTPS; unsupported browsers report a setup error rather than fall back to compressed audio.
+- ESS and PCM share the **same AudioContext**. The WAV sample rate is the actual AudioContext rendering/capture rate, not an assumed 48 kHz. The microphone track's reported `getSettings().sampleRate` and channel count are separately retained because the browser can resample/downmix the input.
+- After 3–2–1: recording prepare → pre-roll (at least 250 ms of captured samples) → ESS playback while recording → post-roll (at least 250 ms after the playback end callback) → validate/encode WAV → direction complete. The recorder acknowledges sample-counted pre-roll before playback starts. Main-thread callback latency can extend pre/post-roll; it cannot shorten the required windows. Total duration is therefore usually slightly over 3.5 s.
+- Metadata includes the actual sweep start offset relative to the capture's AudioContext start frame. Continuity, nonempty finite samples and complete pre/sweep/post coverage are checked before accepting a recording. A disconnected or muted track, processor error, suspended audio context, hidden tab or timeout discards the incomplete capture and stops playback. Resume requires manual reconfirmation and a fresh full capture.
+- Capture timestamps are UTC wall-clock estimates mapped from the AudioContext start frame; they are not calibrated hardware timestamps. Input/output device latency and acoustic propagation delay are not measured or corrected.
+- Capture is capped at 15 s in the worklet, with an 18 s controller watchdog. Sources, worklets and microphone tracks are cleaned up on disconnect/unmount. The ESS AudioBuffer is still decoded once and reused.
+
+Requested constraints are `echoCancellation: false`, `noiseSuppression: false`, `autoGainControl: false`, with mono preferred. Each file's metadata stores requested values and the complete effective `track.getSettings()` snapshot; missing values are not assumed false. Warnings flag processing that remains enabled/unreported, very low/silent input and possible clipping. These are basic software diagnostics, not an acoustic-response analysis. A recording with a quality warning is retained for inspection; it does not prove a usable measurement.
+
+### Data and ZIP schema
+
+Recordings remain in memory for the current tab. No server receives audio or metadata. Reload, Restart and Exit clear the dataset; Previous clears the revisited direction and all later directions. Switching microphones preserves completed files and records each file's own microphone identity; the UI warns if a session includes multiple microphones. A paused incomplete direction is discarded, while earlier completed directions remain.
+
+Export becomes available only after all eight unique direction WAVs pass format/metadata consistency validation. The archive uses standard ZIP STORE with CRC32 and contains exactly:
+
+```text
+metadata.json
+000deg.wav
+045deg.wav
+090deg.wav
+135deg.wav
+180deg.wav
+225deg.wav
+270deg.wav
+315deg.wav
+```
+
+Each WAV is mono, uncompressed little-endian **16-bit PCM**, encoded from worklet float PCM without normalization or automatic level changes. Each recording entry in `metadata.json` includes direction label (manual prompt), actual sample rate, channel count, frame count, duration, capture timestamp, WAV filename/encoding/size, microphone label/device/group identity, requested/effective processing settings, ESS identifier, pre-roll/sweep-start offset/sweep-duration/actual post-roll, start frame, RMS/peak and warnings. Session metadata contains schema/app version, session UUID/start/export timestamps, user agent, ESS parameters and fixed gain, capture/storage mode and limitations. Device identities are private metadata in the local download; there is no upload.
+
+`dataset.ts` implements PCM16 WAV encoding, validation, quality flags and dependency-free ZIP packaging. `captureDirection.ts` coordinates playback and recording with abort-safe cleanup; the reducer grants completion only on `RECORDING_COMPLETE`, never on playback end alone. The UI separately displays **Playback completed** during post-roll and **Audio recording completed** after successful WAV capture.
+
+### V0.6 verification
+
+- Automated tests: microphone grant/denial, requested constraints, old-track shutdown on switching, removal, late permission cancellation; real worklet source exercised in a simulated render environment; pre-roll/post-roll sample counts, discontinuity/empty-input handling; recorder overlap prevention, sample-rate propagation, watchdog and stale setup cancellation; eight-direction capture orchestration, interrupted/short/failed capture rejection; WAV encoding and metadata consistency; ZIP names/entries/CRC; existing ESS and pose tests.
+- Independent Python `zipfile`/`wave` check of a **simulated** eight-recording export: nine entries, valid CRCs, mono PCM16, sample rates/frame counts match metadata. This is a file-format test, not a real acoustic dataset.
+- Real desktop Chrome: microphone permission granted by a user action; live PCM levels changed; actual settings reported all three processing options off. Switching between available phone and MacBook built-in microphones succeeded. A real 0° capture reached **Audio recording completed** and **Session recordings 1/8**. Camera remained ready and pose status/landmarks continued updating. Export was disabled with fewer than eight recordings.
+- Full real eight-direction recording/export, physical unplug/revoked-permission recovery, live pause timing and real mobile-browser acceptance still require human verification. Automated tests use simulated devices/audio clocks and cannot establish speaker/microphone acoustic quality.
+
+Manual acceptance: enable microphone; inspect selected device, levels and effective processing; set comfortable playback volume; start the flow and confirm each direction. Verify pre-roll → playback → post-roll → recording complete. Pause during pre-roll, playback and post-roll and verify no new recording is retained; Resume and reconfirm to replay. Test switching devices, Disconnect, Previous, Restart and Exit. Finish eight directions and download the ZIP, then inspect WAVs and metadata. Repeat on an actual phone via HTTPS. Built-in microphone recordings are **software pipeline tests**, not measurements of the user's pinna response, HRTF, orientation or localization. No acoustic calibration success is claimed.
